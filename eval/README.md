@@ -1,4 +1,4 @@
-label和prediction各存一个文件，格式是<NEWLINE> | xx | xx | xx |
+label和prediction各存一个文件，格式是\<NEWLINE\> | xx | xx | xx |
 
 执行calc_metrics文件，目前是依赖于print的。_test_hyp.txt  _test_tgt.txt  --row-header  --col-header
 
