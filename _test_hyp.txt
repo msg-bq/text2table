@@ -1,0 +1,2 @@
+<NEWLINE> |  | Losses | Total points | Points in 4th quarter | Wins | <NEWLINE> | Hawks | 12 | 95 |  | 46 | <NEWLINE> | Magic | 41 | 88 | 21 | 19 | <NEWLINE>
+<NEWLINE> |  | Assists | Points | Total rebounds | Steals | <NEWLINE> | Nikola Vucevic |  | 21 | 15 |  | <NEWLINE> | Al Horford | 4 | 17 | 13 | 2 | <NEWLINE> | Jeff Teague | 7 | 17 |  | 2 |

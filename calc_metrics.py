@@ -8,7 +8,6 @@ import numpy as np
 import tqdm
 from sacrebleu import sentence_chrf
 
-from scripts.eval.calc_data_f_score import calc_similarity_matrix
 from table_utils import extract_table_by_name, parse_text_to_table, is_empty_table
 
 
@@ -22,16 +21,15 @@ def parse_args():
     parser.add_argument('tgt')
     parser.add_argument('--row-header', default=False, action="store_true")  # 像是是否考虑header匹配与否
     parser.add_argument('--col-header', default=False, action="store_true")
-    parser.add_argument('--table-name', default=None)
     parser.add_argument('--metric', default='E', choices=['E', 'c', 'BS-scaled', ],
                         help="E: exact match\nc: chrf\nBS-scaled: re-scaled BERTScore")
-    parser.add_argument('--src', default=None)
     args = parser.parse_args()
     assert args.row_header or args.col_header
     print("Args", args)
     return args
 
-def parse_table_element_to_relation(table, i, j, row_header: bool, col_header: bool):
+
+def _parse_table_element_to_relation(table, i, j, row_header: bool, col_header: bool):
     assert row_header or col_header
     relation = []
     if row_header:
@@ -43,7 +41,8 @@ def parse_table_element_to_relation(table, i, j, row_header: bool, col_header: b
     relation.append(table[i][j])
     return tuple(relation)
 
-def parse_table_to_data(table, row_header: bool, col_header: bool):  # ret: row_headers, col_headers, relation tuples
+
+def _parse_table_to_data(table, row_header: bool, col_header: bool):  # ret: row_headers, col_headers, relation tuples
     if is_empty_table(table, row_header, col_header):
         return set(), set(), set()
 
@@ -59,11 +58,11 @@ def parse_table_to_data(table, row_header: bool, col_header: bool):  # ret: row_
     for i in range(1 if col_header else 0, row):
         for j in range(1 if row_header else 0, col):
             if table[i][j] != "":
-                relations.append(parse_table_element_to_relation(table, i, j, row_header, col_header))
+                relations.append(_parse_table_element_to_relation(table, i, j, row_header, col_header))
     return set(row_headers), set(col_headers), set(relations)
 
 
-def calc_similarity_matrix(tgt_data, pred_data, metric):
+def _calc_similarity_matrix(tgt_data, pred_data, metric):
     def calc_data_similarity(tgt, pred):
         if isinstance(tgt, tuple):
             ret = 1.0
@@ -102,8 +101,8 @@ def calc_similarity_matrix(tgt_data, pred_data, metric):
 #  我下意识会认为这里是笛卡尔积，但实际上是等价于zip
 
 
-def metrics_by_sim(tgt_data, pred_data, metric):
-    sim = calc_similarity_matrix(tgt_data, pred_data, metric)  # (n_tgt, n_pred) matrix
+def _metrics_by_sim(tgt_data, pred_data, metric):
+    sim = _calc_similarity_matrix(tgt_data, pred_data, metric)  # (n_tgt, n_pred) matrix
     prec = np.mean(np.max(sim, axis=0))
     recall = np.mean(np.max(sim, axis=1))
     if prec + recall == 0.0:
@@ -113,15 +112,16 @@ def metrics_by_sim(tgt_data, pred_data, metric):
     return prec, recall, f1, sim.shape[0], sim.shape[1]
 
 
-def read_tables(path: str) -> List[str]:
+def _read_tables(path: str) -> List[str]:
     data = []
     with open(path) as f:
         for line in f:
             line = line.strip()
-            line = extract_table_by_name(line, args.table_name)
+            line = extract_table_by_name(line)
             data.append(parse_text_to_table(line))
 
     return data
+
 
 def calc_wrong_format(hyp_data, tgt_data):
     empty_tgt = 0
@@ -134,6 +134,7 @@ def calc_wrong_format(hyp_data, tgt_data):
 
     valid_tgt = len(hyp_data) - empty_tgt
     print("Wrong format: %d / %d (%.2f%%)" % (wrong_format, valid_tgt, wrong_format / valid_tgt * 100))
+
 
 def calc_f_score(hyp_data, tgt_data):
     row_header_precision = []
@@ -169,8 +170,8 @@ def calc_f_score(hyp_data, tgt_data):
             relation_recall.append(0)
             relation_f1.append(0)
         else:
-            hyp_row_headers, hyp_col_headers, hyp_relations = parse_table_to_data(hyp_table, args.row_header,
-                                                                                  args.col_header)
+            hyp_row_headers, hyp_col_headers, hyp_relations = _parse_table_to_data(hyp_table, args.row_header,
+                                                                                   args.col_header)
             """
                 hyp: array([['', 'Losses', 'Total points', 'Points in 4th quarter', 'Wins'],
            ['Hawks', '12', '95', '', '46'],
@@ -180,10 +181,10 @@ def calc_f_score(hyp_data, tgt_data):
                 relations = {('Magic', 'Losses', '41'), ('Magic', 'Wins', '19'), ('Hawks', 'Total points', '95'), ('Hawks', 'Wins', '46'), ('Magic', 'Points in 4th quarter', '21'), ('Hawks', 'Losses', '12'), ('Magic', 'Total points', '88')}
                 (如果col或row缺失，那里面就会是2维tuple。如果还缺估计就是1维了。总之是一个个cell叭)
                 """
-            tgt_row_headers, tgt_col_headers, tgt_relations = parse_table_to_data(tgt_table, args.row_header,
-                                                                                  args.col_header)
+            tgt_row_headers, tgt_col_headers, tgt_relations = _parse_table_to_data(tgt_table, args.row_header,
+                                                                                   args.col_header)
             if args.row_header:
-                p, r, f, n_tgt, n_pred = metrics_by_sim(tgt_row_headers, hyp_row_headers, args.metric)  # 基本就是一个个值比对
+                p, r, f, n_tgt, n_pred = _metrics_by_sim(tgt_row_headers, hyp_row_headers, args.metric)  # 基本就是一个个值比对
                 #  不同的metric影响两个值的相似度计算方式，比如exact还是n-gram什么的。元组的相似度是元素分数的累乘
                 #
                 row_header_precision.append(p)
@@ -192,7 +193,7 @@ def calc_f_score(hyp_data, tgt_data):
                 row_header_n_tgt.append(n_tgt)
                 row_header_n_pred.append(n_pred)
             if args.col_header:
-                p, r, f, n_tgt, n_pred = metrics_by_sim(tgt_col_headers, hyp_col_headers, args.metric)
+                p, r, f, n_tgt, n_pred = _metrics_by_sim(tgt_col_headers, hyp_col_headers, args.metric)
                 col_header_precision.append(p)
                 col_header_recall.append(r)
                 col_header_f1.append(f)
@@ -205,7 +206,7 @@ def calc_f_score(hyp_data, tgt_data):
                 relation_n_tgt.append(0)
                 relation_n_pred.append(0)
             else:
-                p, r, f, n_tgt, n_pred = metrics_by_sim(tgt_relations, hyp_relations, args.metric)
+                p, r, f, n_tgt, n_pred = _metrics_by_sim(tgt_relations, hyp_relations, args.metric)
                 relation_precision.append(p)
                 relation_recall.append(r)
                 relation_f1.append(f)
@@ -242,8 +243,10 @@ def calc_f_score(hyp_data, tgt_data):
     # f = 2 * p * r / (p + r)
     # print("Non-header cell: precision = %.2f; recall = %.2f; f1 = %.2f" % (p * 100, r * 100, f * 100))
 
+
 if __name__ == '__main__':
     args = parse_args()
-    hyp_data_list = read_tables(args.hyp)
-    tgt_data_list = read_tables(args.tgt)
-    # src_data = read_tables(args.src)  # 不知道干嘛
+    hyp_data_list = _read_tables(args.hyp)
+    tgt_data_list = _read_tables(args.tgt)
+    calc_wrong_format(hyp_data_list, tgt_data_list)
+    calc_f_score(hyp_data_list, tgt_data_list)

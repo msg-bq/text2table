@@ -40,14 +40,10 @@ def parse_text_to_table(text, strict=False):
     return data
 
 
-def extract_table_by_name(text, name):
+def extract_table_by_name(text):
     lines = [line.strip() for line in text.replace(" <NEWLINE> ", "\n").strip().splitlines()]
-    if name + ":" not in lines:
-        return ""
     table = []
-    for line in lines[lines.index(name + ":") + 1:]:
-        if line.endswith(":"):
-            break
+    for line in lines:
         table.append(line.strip())
     return " <NEWLINE> ".join(table)
 
