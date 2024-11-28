@@ -123,7 +123,7 @@ def _read_tables(path: str) -> List[str]:
     return data
 
 
-def calc_wrong_format(hyp_data, tgt_data):
+def calc_wrong_format(hyp_data: List[str], tgt_data: List[str]):
     empty_tgt = 0
     wrong_format = 0
     for hyp_table, tgt_table in zip(hyp_data, tgt_data):
