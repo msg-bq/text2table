@@ -64,6 +64,9 @@ def _parse_table_to_data(table, row_header: bool, col_header: bool):  # ret: row
 
 def _calc_similarity_matrix(tgt_data, pred_data, metric):
     def calc_data_similarity(tgt, pred):
+        tgt = tuple([t.replace(' ', '') for t in tgt]) if isinstance(tgt, tuple) else tgt.replace(' ', '')
+        pred = tuple([p.replace(' ', '') for p in pred]) if isinstance(pred, tuple) else pred.replace(' ', '')
+
         if isinstance(tgt, tuple):
             ret = 1.0
             for tt, pp in zip(tgt, pred):
@@ -89,32 +92,34 @@ def _calc_similarity_matrix(tgt_data, pred_data, metric):
 
         metric_cache[(tgt, pred)] = ret
         return ret
-    # if metric == 'BS-scaled':
-    #     global bert_scorer
-    #     if bert_scorer is None:
-    #         bert_scorer = bert_score.BERTScorer(lang="en", rescale_with_baseline=True)
-    #     matrix = [(tgt, pred) for tgt in tgt_data for pred in pred_data]
-    #     ret = bert_scorer.score([i[0] for i in matrix], [i[1] for i in matrix])[2]
-    #     return ret.reshape([len(pred_data), len(tgt_data)]).numpy()
-    # else:
-    return np.array([[calc_data_similarity(tgt, pred) for pred in pred_data] for tgt in tgt_data], dtype=float)
+    if metric == 'BS-scaled':
+        global bert_scorer
+        if bert_scorer is None:
+            bert_scorer = bert_score.BERTScorer(lang="en", rescale_with_baseline=True)
+        matrix = [(tgt, pred) for tgt in tgt_data for pred in pred_data]
+        ret = bert_scorer.score([i[0] for i in matrix], [i[1] for i in matrix])[2]
+        return ret.reshape([len(pred_data), len(tgt_data)]).numpy()
+    else:
+        return np.array([[calc_data_similarity(tgt, pred) for pred in pred_data] for tgt in tgt_data], dtype=float)
 #  我下意识会认为这里是笛卡尔积，但实际上是等价于zip
 
 
 def _metrics_by_sim(tgt_data, pred_data, metric):
     sim = _calc_similarity_matrix(tgt_data, pred_data, metric)  # (n_tgt, n_pred) matrix
-    prec = np.mean(np.max(sim, axis=0))
-    recall = np.mean(np.max(sim, axis=1))
+    prec = np.mean(np.max(sim, axis=0)) if len(sim) else 0.0
+    recall = np.mean(np.max(sim, axis=1)) if len(sim) else 0.0
     if prec + recall == 0.0:
         f1 = 0.0
     else:
         f1 = 2 * prec * recall / (prec + recall)
-    return prec, recall, f1, sim.shape[0], sim.shape[1]
+    return (prec, recall, f1,
+            sim.shape[0] if len(sim) else 0,
+            sim.shape[1] if len(sim) else 0)
 
 
 def _read_tables(path: str) -> List[str]:
     data = []
-    with open(path) as f:
+    with open(path, encoding='utf8') as f:
         for line in f:
             line = line.strip()
             line = extract_table_by_name(line)
@@ -183,22 +188,30 @@ def calc_f_score(hyp_data, tgt_data):
                 """
             tgt_row_headers, tgt_col_headers, tgt_relations = _parse_table_to_data(tgt_table, args.row_header,
                                                                                    args.col_header)
+
             if args.row_header:
                 p, r, f, n_tgt, n_pred = _metrics_by_sim(tgt_row_headers, hyp_row_headers, args.metric)  # 基本就是一个个值比对
                 #  不同的metric影响两个值的相似度计算方式，比如exact还是n-gram什么的。元组的相似度是元素分数的累乘
-                #
+                # if p < 0.8:
+                #     print(p, tgt_row_headers, hyp_row_headers)
+
                 row_header_precision.append(p)
                 row_header_recall.append(r)
                 row_header_f1.append(f)
                 row_header_n_tgt.append(n_tgt)
                 row_header_n_pred.append(n_pred)
+
             if args.col_header:
                 p, r, f, n_tgt, n_pred = _metrics_by_sim(tgt_col_headers, hyp_col_headers, args.metric)
+                if p < 0.8:
+                    print('col', p, tgt_col_headers, hyp_col_headers)
+
                 col_header_precision.append(p)
                 col_header_recall.append(r)
                 col_header_f1.append(f)
                 col_header_n_tgt.append(n_tgt)
                 col_header_n_pred.append(n_pred)
+
             if len(hyp_relations) == 0:
                 relation_precision.append(0.0)
                 relation_recall.append(0.0)
@@ -207,6 +220,7 @@ def calc_f_score(hyp_data, tgt_data):
                 relation_n_pred.append(0)
             else:
                 p, r, f, n_tgt, n_pred = _metrics_by_sim(tgt_relations, hyp_relations, args.metric)
+                print('realtion', p, tgt_relations, hyp_relations)
                 relation_precision.append(p)
                 relation_recall.append(r)
                 relation_f1.append(f)

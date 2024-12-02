@@ -1,2 +1,4 @@
 sacrebleu==v2.0.0
 bert_score==v0.3.11
+numpy~=1.21.6
+tqdm~=4.67.1
